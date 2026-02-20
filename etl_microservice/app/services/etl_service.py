@@ -2,6 +2,8 @@ from time import perf_counter
 
 import polars as pl
 
+TAX_RATE = 0.19
+
 
 class InvoiceEtlService:
     def transform(self, invoices: list[dict]) -> pl.DataFrame:
@@ -16,7 +18,7 @@ class InvoiceEtlService:
             pl.col("issued_at")
             .cast(pl.Utf8, strict=False)
             .str.to_datetime(strict=False, time_zone="UTC"),
-            (pl.col("total").cast(pl.Float64, strict=False) * 0.19).alias("tax_amount"),
+            (pl.col("total").cast(pl.Float64, strict=False) * TAX_RATE).alias("tax_amount"),
         ).filter(
             pl.col("external_id").is_not_null() & pl.col("total").is_not_null()
         )

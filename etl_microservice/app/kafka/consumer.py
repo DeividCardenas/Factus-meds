@@ -40,11 +40,16 @@ class InvoiceKafkaConsumer:
             await self._handle_message(message.value)
 
     async def _handle_message(self, raw_value: bytes) -> None:
-        data: dict[str, Any] = json.loads(raw_value.decode("utf-8"))
+        try:
+            data: dict[str, Any] = json.loads(raw_value.decode("utf-8"))
+        except json.JSONDecodeError:
+            logger.warning("Kafka message is not valid JSON. Skipping message.")
+            return
+
         invoices = data.get("payload", [])
 
         if not isinstance(invoices, list):
             logger.warning("Kafka message payload is not a list. Skipping message.")
             return
 
-        self._etl_service.transform(invoices)
+        await asyncio.to_thread(self._etl_service.transform, invoices)
