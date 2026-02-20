@@ -4,3 +4,4 @@ aiokafka==0.12.0
 polars==1.33.1
 asyncpg==0.30.0
 strawberry-graphql==0.278.0
+httpx==0.28.1
