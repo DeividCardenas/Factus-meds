@@ -81,7 +81,8 @@ async def lifespan(app: FastAPI):
     )
     invoice_repository = InvoiceRepositoryAsyncpg(db_pool=app.state.db_pool)
     process_invoice_batch_use_case = ProcessInvoiceBatchUseCase(
-        invoice_repository=invoice_repository
+        invoice_repository=invoice_repository,
+        factus_client=factus_client,
     )
     consumer = InvoiceKafkaConsumer(
         process_invoice_batch_use_case=process_invoice_batch_use_case
