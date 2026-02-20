@@ -1,10 +1,13 @@
 <?php
 
-namespace App\Http\Requests;
+declare(strict_types=1);
 
+namespace App\InvoicingIngest\Infrastructure\Http\Requests;
+
+use App\InvoicingIngest\Application\DTO\InvoiceBatchDTO;
 use Illuminate\Foundation\Http\FormRequest;
 
-class StoreInvoiceBatchRequest extends FormRequest
+final class StoreInvoiceBatchRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -30,5 +33,15 @@ class StoreInvoiceBatchRequest extends FormRequest
             'invoices.*.total' => ['required', 'numeric', 'min:0'],
             'invoices.*.currency' => ['required', 'string', 'size:3'],
         ];
+    }
+
+    public function toDto(): InvoiceBatchDTO
+    {
+        $validated = $this->validated();
+
+        return new InvoiceBatchDTO(
+            source: isset($validated['source']) ? (string) $validated['source'] : null,
+            invoices: $validated['invoices']
+        );
     }
 }
