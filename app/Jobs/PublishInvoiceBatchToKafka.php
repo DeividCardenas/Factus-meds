@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 
 class PublishInvoiceBatchToKafka implements ShouldQueue
 {
@@ -18,12 +19,16 @@ class PublishInvoiceBatchToKafka implements ShouldQueue
 
     public function __construct(
         public string $batchId,
-        public array $payload
+        public string $payloadCacheKey
     ) {
     }
 
     public function handle(InvoiceBatchProducer $producer): void
     {
-        $producer->publish($this->batchId, $this->payload);
+        $payload = Cache::pull($this->payloadCacheKey);
+
+        if (is_array($payload)) {
+            $producer->publish($this->batchId, $payload);
+        }
     }
 }

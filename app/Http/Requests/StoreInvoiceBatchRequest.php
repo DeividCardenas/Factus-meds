@@ -8,7 +8,12 @@ class StoreInvoiceBatchRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $configuredKey = env('INGEST_API_KEY');
+        $providedKey = (string) $this->header('X-Ingest-Key', '');
+
+        return is_string($configuredKey)
+            && $configuredKey !== ''
+            && hash_equals($configuredKey, $providedKey);
     }
 
     public function rules(): array
