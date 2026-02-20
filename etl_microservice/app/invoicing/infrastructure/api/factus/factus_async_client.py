@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 
@@ -115,4 +116,38 @@ class FactusAsyncClient:
         return await self._http_client.get(
             "/v1/numbering-ranges",
             headers={"Authorization": f"Bearer {token}"},
+        )
+
+    async def create_invoice(
+        self, invoice_data: dict[str, Any], numbering_range_id: int
+    ) -> dict[str, Any]:
+        token = await self.authenticate()
+        response = await self._request_create_invoice(
+            token=token,
+            payload={**invoice_data, "numbering_range_id": numbering_range_id},
+        )
+
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            token = await self.authenticate(force_refresh=True)
+            response = await self._request_create_invoice(
+                token=token,
+                payload={**invoice_data, "numbering_range_id": numbering_range_id},
+            )
+
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise RuntimeError(
+                "Factus invoice creation response is invalid: expected dict, got "
+                + type(payload).__name__
+            )
+        return payload
+
+    async def _request_create_invoice(
+        self, token: str, payload: dict[str, Any]
+    ) -> httpx.Response:
+        return await self._http_client.post(
+            "/v1/bills/validate",
+            headers={"Authorization": f"Bearer {token}"},
+            json=payload,
         )
