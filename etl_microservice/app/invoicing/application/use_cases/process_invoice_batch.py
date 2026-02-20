@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 import httpx
+from opentelemetry import trace
 import polars as pl
 
 from app.invoicing.application.ports.factus_client_port import FactusClientPort
@@ -13,6 +14,7 @@ from app.invoicing.domain.entities.invoice_batch import InvoiceBatch
 from app.invoicing.infrastructure.etl.polars_transformer import transform_invoices
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,23 +40,25 @@ class ProcessInvoiceBatchUseCase:
 
     async def execute(self, payload: Mapping[str, Any]) -> str:
         batch = InvoiceBatch.from_message(payload)
-        df = await asyncio.to_thread(transform_invoices, batch.invoices, batch.batch_id)
+        with tracer.start_as_current_span("process_invoice_batch.polars_transform"):
+            df = await asyncio.to_thread(transform_invoices, batch.invoices, batch.batch_id)
         if df.is_empty():
             return batch.batch_id
 
         numbering_range_id = await self._factus_client.get_active_numbering_range_id()
         semaphore = asyncio.Semaphore(self._FACTUS_CONCURRENCY_LIMIT)
-        results = await asyncio.gather(
-            *[
-                self._send_invoice_to_factus(
-                    invoice_row=invoice_row,
-                    numbering_range_id=numbering_range_id,
-                    semaphore=semaphore,
-                    batch_id=batch.batch_id,
-                )
-                for invoice_row in df.rows(named=True)
-            ]
-        )
+        with tracer.start_as_current_span("process_invoice_batch.factus_gather"):
+            results = await asyncio.gather(
+                *[
+                    self._send_invoice_to_factus(
+                        invoice_row=invoice_row,
+                        numbering_range_id=numbering_range_id,
+                        semaphore=semaphore,
+                        batch_id=batch.batch_id,
+                    )
+                    for invoice_row in df.rows(named=True)
+                ]
+            )
         logger.info(
             "factus_batch_sync_completed sent=%s success=%s failed=%s",
             len(results),

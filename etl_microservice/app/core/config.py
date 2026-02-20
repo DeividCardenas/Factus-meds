@@ -18,6 +18,10 @@ class Settings:
     factus_password: str = os.getenv("FACTUS_PASSWORD", "")
     factus_client_id: str = os.getenv("FACTUS_CLIENT_ID", "")
     factus_client_secret: str = os.getenv("FACTUS_CLIENT_SECRET", "")
+    otel_service_name: str = os.getenv("OTEL_SERVICE_NAME", "factus-etl")
+    otel_exporter_endpoint: str = os.getenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317"
+    )
 
 
 settings = Settings()

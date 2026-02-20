@@ -5,3 +5,9 @@ polars==1.33.1
 asyncpg==0.30.0
 strawberry-graphql==0.278.0
 httpx==0.28.1
+opentelemetry-api==1.28.2
+opentelemetry-sdk==1.28.2
+opentelemetry-exporter-otlp-proto-grpc==1.28.2
+opentelemetry-instrumentation-fastapi==0.49b2
+opentelemetry-instrumentation-aiokafka==0.49b2
+opentelemetry-instrumentation-asyncpg==0.49b2

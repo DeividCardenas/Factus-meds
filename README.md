@@ -82,3 +82,16 @@ curl -X POST http://localhost:8080/api/v1/invoice-batches \
 ```
 
 3. Revisa la consola del contenedor `etl` para ver el `DataFrame` transformado por Polars.
+
+## Observabilidad
+
+- Jaeger UI: `http://localhost:16686`
+- Prometheus UI: `http://localhost:9090`
+
+## Prueba de estrés con k6 (Docker)
+
+```bash
+docker run --rm --network factus-meds_default \
+  -v "$PWD/load_testing:/scripts" \
+  grafana/k6 run /scripts/stress_test.js
+```
