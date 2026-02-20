@@ -87,9 +87,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     )
     trace.set_tracer_provider(tracer_provider)
-    FastAPIInstrumentor.instrument_app(app)
-    AIOKafkaInstrumentor().instrument()
-    AsyncPGInstrumentor().instrument()
+    fastapi_instrumentor = FastAPIInstrumentor()
+    aiokafka_instrumentor = AIOKafkaInstrumentor()
+    asyncpg_instrumentor = AsyncPGInstrumentor()
+    fastapi_instrumentor.instrument_app(app)
+    aiokafka_instrumentor.instrument()
+    asyncpg_instrumentor.instrument()
     app.state.db_pool = await asyncpg.create_pool(settings.database_url)
     missing_factus_settings = [
         name
@@ -132,8 +135,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await consumer.stop()
         await factus_client.close()
         await app.state.db_pool.close()
-        AsyncPGInstrumentor().uninstrument()
-        AIOKafkaInstrumentor().uninstrument()
+        asyncpg_instrumentor.uninstrument()
+        aiokafka_instrumentor.uninstrument()
+        fastapi_instrumentor.uninstrument_app(app)
         await tracer_provider.shutdown()
 
 

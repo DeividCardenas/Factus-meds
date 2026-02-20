@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS invoices CASCADE;
 CREATE TABLE invoices (
     external_id TEXT,
     customer_id TEXT,
-    issued_at TIMESTAMPTZ,
+    issued_at TIMESTAMPTZ NOT NULL,
     total NUMERIC(18, 2),
     currency TEXT,
     tax_amount NUMERIC(18, 2),
@@ -11,7 +11,8 @@ CREATE TABLE invoices (
     qr_url TEXT,
     pdf_url TEXT,
     status TEXT,
-    error_message TEXT
+    error_message TEXT,
+    PRIMARY KEY (external_id, issued_at)
 ) PARTITION BY RANGE (issued_at);
 
 DO $$
@@ -22,8 +23,8 @@ DECLARE
     partition_name TEXT;
 BEGIN
     FOR i IN 0..2 LOOP
-        partition_start := (start_month + (i || ' month')::interval)::date;
-        partition_end := (start_month + ((i + 1) || ' month')::interval)::date;
+        partition_start := (start_month + make_interval(months => i))::date;
+        partition_end := (start_month + make_interval(months => i + 1))::date;
         partition_name := format('invoices_%s', to_char(partition_start, 'YYYY_MM'));
 
         EXECUTE format(
