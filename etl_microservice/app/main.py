@@ -13,6 +13,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_fastapi_instrumentator import Instrumentator
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 
@@ -140,6 +141,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Invoice ETL Microservice", lifespan=lifespan)
 FastAPIInstrumentor.instrument_app(app)
+Instrumentator().instrument(app).expose(app)
 schema = strawberry.Schema(query=Query)
 app.include_router(GraphQLRouter(schema), prefix="/graphql")
 

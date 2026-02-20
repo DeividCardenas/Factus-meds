@@ -11,3 +11,4 @@ opentelemetry-exporter-otlp-proto-grpc==1.28.2
 opentelemetry-instrumentation-fastapi==0.49b2
 opentelemetry-instrumentation-aiokafka==0.49b2
 opentelemetry-instrumentation-asyncpg==0.49b2
+prometheus-fastapi-instrumentator==7.1.0

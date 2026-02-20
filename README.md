@@ -101,5 +101,6 @@ curl -X POST http://localhost:8080/api/v1/invoice-batches \
 ```bash
 docker run --rm --network factus-meds_default \
   -v "$PWD/load_testing:/scripts" \
-  grafana/k6 run /scripts/stress_test.js
+  -e K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write \
+  grafana/k6 run -o experimental-prometheus-rw /scripts/stress_test.js
 ```
