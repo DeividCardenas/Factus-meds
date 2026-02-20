@@ -5,6 +5,14 @@ from typing import AsyncIterator
 
 import asyncpg  # type: ignore[import-untyped]
 from fastapi import FastAPI
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.aiokafka import AIOKafkaInstrumentor
+from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 
@@ -67,6 +75,21 @@ class Query:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_json_logging()
+    tracer_provider = TracerProvider(
+        resource=Resource.create({SERVICE_NAME: settings.otel_service_name})
+    )
+    tracer_provider.add_span_processor(
+        BatchSpanProcessor(
+            OTLPSpanExporter(
+                endpoint=settings.otel_exporter_endpoint,
+                insecure=True,
+            )
+        )
+    )
+    trace.set_tracer_provider(tracer_provider)
+    FastAPIInstrumentor.instrument_app(app)
+    AIOKafkaInstrumentor().instrument()
+    AsyncPGInstrumentor().instrument()
     app.state.db_pool = await asyncpg.create_pool(settings.database_url)
     missing_factus_settings = [
         name
@@ -109,6 +132,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await consumer.stop()
         await factus_client.close()
         await app.state.db_pool.close()
+        AsyncPGInstrumentor().uninstrument()
+        AIOKafkaInstrumentor().uninstrument()
+        await tracer_provider.shutdown()
 
 
 app = FastAPI(title="Invoice ETL Microservice", lifespan=lifespan)

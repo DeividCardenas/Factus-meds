@@ -22,6 +22,29 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  pgbouncer:
+    image: edoburu/pgbouncer:1.24.1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=factus
+      - DB_PASSWORD=factus
+      - DB_NAME=factus
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=500
+      - DEFAULT_POOL_SIZE=50
+    ports:
+      - "6432:5432"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     restart: unless-stopped
@@ -53,6 +76,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.61
+    restart: unless-stopped
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   etl:
     build:
       context: ./etl_microservice
@@ -62,11 +112,15 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_started
     environment:
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_INGEST_TOPIC=invoice.ingest.v1
       - KAFKA_GROUP_ID=invoice-etl-v1
-      - DATABASE_URL=postgresql://factus:factus@postgres:5432/factus
+      - DATABASE_URL=postgresql://factus:factus@pgbouncer:5432/factus
+      - OTEL_SERVICE_NAME=factus-etl
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     ports:
       - "8000:8000"
     healthcheck:
