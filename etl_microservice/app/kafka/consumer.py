@@ -46,7 +46,8 @@ class InvoiceKafkaConsumer:
             logger.warning("Kafka message is not valid JSON. Skipping message.")
             return
 
-        invoices = data.get("payload", [])
+        raw_payload = data.get("payload", [])
+        invoices = raw_payload.get("invoices", []) if isinstance(raw_payload, dict) else raw_payload
 
         if not isinstance(invoices, list):
             logger.warning("Kafka message payload is not a list. Skipping message.")
