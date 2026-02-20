@@ -16,6 +16,7 @@ app/
     Kafka/
       InvoiceBatchProducer.php
 config/
+  ingest.php
   kafka.php
 routes/
   api.php

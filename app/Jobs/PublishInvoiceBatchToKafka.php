@@ -9,6 +9,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
+use RuntimeException;
 
 class PublishInvoiceBatchToKafka implements ShouldQueue
 {
@@ -25,10 +26,15 @@ class PublishInvoiceBatchToKafka implements ShouldQueue
 
     public function handle(InvoiceBatchProducer $producer): void
     {
-        $payload = Cache::pull($this->payloadCacheKey);
+        $payload = Cache::get($this->payloadCacheKey);
 
-        if (is_array($payload)) {
-            $producer->publish($this->batchId, $payload);
+        if (! is_array($payload)) {
+            throw new RuntimeException(
+                sprintf('Invoice payload for batch %s was not found in cache.', $this->batchId)
+            );
         }
+
+        $producer->publish($this->batchId, $payload);
+        Cache::forget($this->payloadCacheKey);
     }
 }

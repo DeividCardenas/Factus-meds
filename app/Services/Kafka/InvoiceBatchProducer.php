@@ -43,7 +43,7 @@ class InvoiceBatchProducer
             $batchId
         );
 
-        $flushResult = $this->producer->flush((int) config('kafka.flush_timeout_ms', 1000));
+        $flushResult = $this->producer->flush((int) config('kafka.flush_timeout_ms'));
 
         if ($flushResult !== RD_KAFKA_RESP_ERR_NO_ERROR) {
             throw new RuntimeException(

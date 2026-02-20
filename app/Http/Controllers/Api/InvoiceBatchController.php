@@ -16,8 +16,9 @@ class InvoiceBatchController extends Controller
         $batchId = (string) Str::uuid();
         $payload = $request->validated();
         $payloadCacheKey = "invoice-batch:{$batchId}";
+        $payloadTtl = (int) config('ingest.payload_ttl_minutes');
 
-        Cache::put($payloadCacheKey, $payload, now()->addMinutes(10));
+        Cache::put($payloadCacheKey, $payload, now()->addMinutes($payloadTtl));
         PublishInvoiceBatchToKafka::dispatch($batchId, $payloadCacheKey);
 
         return response()->json([
