@@ -11,6 +11,13 @@ class Settings:
     database_url: str = os.getenv(
         "DATABASE_URL", "postgresql://factus:factus@postgres:5432/factus"
     )
+    factus_base_url: str = os.getenv(
+        "FACTUS_BASE_URL", "https://api-sandbox.factus.com.co"
+    )
+    factus_email: str = os.getenv("FACTUS_EMAIL", "")
+    factus_password: str = os.getenv("FACTUS_PASSWORD", "")
+    factus_client_id: str = os.getenv("FACTUS_CLIENT_ID", "")
+    factus_client_secret: str = os.getenv("FACTUS_CLIENT_SECRET", "")
 
 
 settings = Settings()

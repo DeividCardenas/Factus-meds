@@ -14,6 +14,7 @@ from app.invoicing.application.use_cases.process_invoice_batch import (
 from app.invoicing.infrastructure.persistence.postgres.invoice_repository_asyncpg import (
     InvoiceRepositoryAsyncpg,
 )
+from app.invoicing.infrastructure.api.factus.factus_async_client import FactusAsyncClient
 from app.kafka.consumer import InvoiceKafkaConsumer
 from app.shared.infrastructure.logging.structured_logger import configure_json_logging
 
@@ -56,6 +57,13 @@ class Query:
 async def lifespan(app: FastAPI):
     configure_json_logging()
     app.state.db_pool = await asyncpg.create_pool(settings.database_url)
+    factus_client = FactusAsyncClient(
+        base_url=settings.factus_base_url,
+        email=settings.factus_email,
+        password=settings.factus_password,
+        client_id=settings.factus_client_id,
+        client_secret=settings.factus_client_secret,
+    )
     invoice_repository = InvoiceRepositoryAsyncpg(db_pool=app.state.db_pool)
     process_invoice_batch_use_case = ProcessInvoiceBatchUseCase(
         invoice_repository=invoice_repository
@@ -63,6 +71,7 @@ async def lifespan(app: FastAPI):
     consumer = InvoiceKafkaConsumer(
         process_invoice_batch_use_case=process_invoice_batch_use_case
     )
+    app.state.factus_client = factus_client
     app.state.invoice_repository = invoice_repository
     await consumer.start()
     app.state.consumer = consumer
@@ -71,6 +80,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await consumer.stop()
+        await factus_client.close()
         await app.state.db_pool.close()
 
 
