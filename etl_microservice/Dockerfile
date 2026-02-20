@@ -20,10 +20,9 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:${PATH}" \
-    UVICORN_WORKERS=1
+    PATH="/opt/venv/bin:${PATH}"
 
-RUN useradd --create-home --shell /usr/sbin/nologin appuser
+RUN useradd --system --no-create-home --uid 10001 --shell /usr/sbin/nologin appuser
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser app ./app
@@ -32,4 +31,4 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS}"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

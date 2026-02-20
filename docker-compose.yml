@@ -104,7 +104,7 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "php -r \"exit((int)!@file_get_contents('http://localhost:8080/health'));\""]
+      test: ["CMD-SHELL", "php -r \"exit((int)!file_get_contents('http://localhost:8080/health'));\""]
       interval: 15s
       timeout: 5s
       retries: 8
