@@ -9,4 +9,6 @@ use App\InvoicingIngest\Domain\Entities\InvoiceBatch;
 interface CacheBatchPayloadPort
 {
     public function store(InvoiceBatch $invoiceBatch): void;
+
+    public function forget(string $batchId): void;
 }

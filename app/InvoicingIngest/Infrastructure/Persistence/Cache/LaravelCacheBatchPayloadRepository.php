@@ -17,7 +17,7 @@ final class LaravelCacheBatchPayloadRepository implements CacheBatchPayloadPort
     public function store(InvoiceBatch $invoiceBatch): void
     {
         $batchId = $invoiceBatch->batchId()->toString();
-        $cacheKey = sprintf('invoice-batch:%s', $batchId);
+        $cacheKey = $this->cacheKey($batchId);
 
         $this->cache->put(
             $cacheKey,
@@ -27,5 +27,15 @@ final class LaravelCacheBatchPayloadRepository implements CacheBatchPayloadPort
             ],
             now()->addMinutes((int) config('ingest.payload_ttl_minutes'))
         );
+    }
+
+    public function forget(string $batchId): void
+    {
+        $this->cache->forget($this->cacheKey($batchId));
+    }
+
+    private function cacheKey(string $batchId): string
+    {
+        return sprintf('invoice-batch:%s', $batchId);
     }
 }

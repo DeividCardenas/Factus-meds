@@ -41,7 +41,7 @@ final class StoreInvoiceBatchRequest extends FormRequest
 
         return new InvoiceBatchDTO(
             source: isset($validated['source']) ? (string) $validated['source'] : null,
-            invoices: is_array($validated['invoices'] ?? null) ? $validated['invoices'] : []
+            invoices: $validated['invoices']
         );
     }
 }

@@ -8,6 +8,7 @@ use App\InvoicingIngest\Application\Ports\Input\AcceptInvoiceBatchInputPort;
 use App\InvoicingIngest\Application\Ports\Output\CacheBatchPayloadPort;
 use App\InvoicingIngest\Application\Ports\Output\PublishInvoiceBatchPort;
 use App\InvoicingIngest\Application\UseCases\AcceptInvoiceBatch\AcceptInvoiceBatchHandler;
+use App\InvoicingIngest\Infrastructure\Messaging\Kafka\MessageSerializer;
 use App\InvoicingIngest\Infrastructure\Messaging\Kafka\RdKafkaProducerAdapter;
 use App\InvoicingIngest\Infrastructure\Persistence\Cache\LaravelCacheBatchPayloadRepository;
 use App\Shared\Infrastructure\Logging\StructuredLogger;
@@ -31,7 +32,12 @@ final class InvoicingIngestServiceProvider extends ServiceProvider
             app(CacheManager::class)->store()
         ));
 
-        $this->app->bind(PublishInvoiceBatchPort::class, RdKafkaProducerAdapter::class);
+        $this->app->singleton(MessageSerializer::class);
+
+        $this->app->singleton(PublishInvoiceBatchPort::class, fn (): RdKafkaProducerAdapter => new RdKafkaProducerAdapter(
+            app(MessageSerializer::class),
+            app(StructuredLogger::class)
+        ));
         $this->app->bind(AcceptInvoiceBatchInputPort::class, AcceptInvoiceBatchHandler::class);
     }
 }
