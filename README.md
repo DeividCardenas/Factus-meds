@@ -55,13 +55,21 @@ etl_microservice/
 
 ## Contenedorización local (Kafka + Laravel + ETL)
 
-1. Levanta todo el stack:
+1. Crea tu archivo de entorno para Docker:
+
+```bash
+cp .env.example .env
+```
+
+2. Ajusta en `.env` las credenciales `FACTUS_*` si vas a usar credenciales reales.
+
+3. Levanta todo el stack:
 
 ```bash
 docker compose up --build
 ```
 
-2. En otra terminal, envía un lote de prueba al endpoint de ingesta:
+4. En otra terminal, envía un lote de prueba al endpoint de ingesta:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/invoice-batches \
@@ -81,7 +89,7 @@ curl -X POST http://localhost:8080/api/v1/invoice-batches \
   }'
 ```
 
-3. Revisa la consola del contenedor `etl` para ver el `DataFrame` transformado por Polars.
+5. Revisa la consola del contenedor `etl` para ver el `DataFrame` transformado por Polars.
 
 ## Observabilidad
 

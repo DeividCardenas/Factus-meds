@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres@sha256:1d1095b0503145be79c79239372aefadfacf6b7c33c9245bbf99ce4b6b89c737
     restart: unless-stopped
     environment:
       - POSTGRES_DB=factus
@@ -23,7 +23,7 @@ services:
         max-file: "3"
 
   pgbouncer:
-    image: edoburu/pgbouncer:1.24.1
+    image: edoburu/pgbouncer@sha256:85d1e38593617af1b5f7f285e97d407e56c29939683cc7cfe4c8f6dc19f1268b
     restart: unless-stopped
     depends_on:
       postgres:
@@ -46,7 +46,7 @@ services:
         max-file: "3"
 
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
+    image: confluentinc/cp-kafka@sha256:620734d9fc0bb1f9886932e5baf33806074469f40e3fe246a3fdbb59309535fa
     restart: unless-stopped
     ports:
       - "9092:9092"
@@ -77,7 +77,7 @@ services:
         max-file: "3"
 
   jaeger:
-    image: jaegertracing/all-in-one:1.61
+    image: jaegertracing/all-in-one@sha256:ab6f1a1f0fb49ea08bcd19f6b84f6081d0d44b364b6de148e1798eb5816bacac
     restart: unless-stopped
     environment:
       - COLLECTOR_OTLP_ENABLED=true
@@ -91,7 +91,7 @@ services:
         max-file: "3"
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus@sha256:f6639335d34a77d9d9db382b92eeb7fc00934be8eae81dbc03b31cfe90411a94
     restart: unless-stopped
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -112,13 +112,15 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      pgbouncer:
-        condition: service_started
     environment:
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_INGEST_TOPIC=invoice.ingest.v1
       - KAFKA_GROUP_ID=invoice-etl-v1
-      - DATABASE_URL=postgresql://factus:factus@pgbouncer:5432/factus
+      - DATABASE_URL=postgresql://factus:factus@postgres:5432/factus
+      - FACTUS_EMAIL=${FACTUS_EMAIL:-dev@example.com}
+      - FACTUS_PASSWORD=${FACTUS_PASSWORD:-dev-password}
+      - FACTUS_CLIENT_ID=${FACTUS_CLIENT_ID:-dev-client-id}
+      - FACTUS_CLIENT_SECRET=${FACTUS_CLIENT_SECRET:-dev-client-secret}
       - OTEL_SERVICE_NAME=factus-etl
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     ports:
