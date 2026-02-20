@@ -13,6 +13,11 @@ INVOICE_COLUMNS = [
     "total",
     "currency",
     "tax_amount",
+    "factus_invoice_id",
+    "qr_url",
+    "pdf_url",
+    "status",
+    "error_message",
 ]
 logger = logging.getLogger(__name__)
 

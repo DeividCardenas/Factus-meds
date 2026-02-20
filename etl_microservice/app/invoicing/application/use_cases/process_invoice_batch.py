@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 import httpx
+import polars as pl
 
 from app.invoicing.application.ports.factus_client_port import FactusClientPort
 from app.invoicing.application.ports.invoice_repository_port import InvoiceRepositoryPort
@@ -38,7 +39,6 @@ class ProcessInvoiceBatchUseCase:
     async def execute(self, payload: Mapping[str, Any]) -> str:
         batch = InvoiceBatch.from_message(payload)
         df = await asyncio.to_thread(transform_invoices, batch.invoices, batch.batch_id)
-        await self._invoice_repository.save_dataframe(df)
         if df.is_empty():
             return batch.batch_id
 
@@ -62,7 +62,26 @@ class ProcessInvoiceBatchUseCase:
             sum(result.status == "error" for result in results),
             extra={"batch_id": batch.batch_id},
         )
+        await self._invoice_repository.save_dataframe(
+            self._attach_factus_results(df=df, results=results)
+        )
         return batch.batch_id
+
+    @staticmethod
+    def _attach_factus_results(
+        df: pl.DataFrame, results: list[FactusInvoiceResult]
+    ) -> pl.DataFrame:
+        results_df = pl.DataFrame(
+            {
+                "external_id": [result.external_id for result in results],
+                "factus_invoice_id": [result.factus_invoice_id for result in results],
+                "qr_url": [result.qr_url for result in results],
+                "pdf_url": [result.pdf_url for result in results],
+                "status": [result.status for result in results],
+                "error_message": [result.error for result in results],
+            }
+        )
+        return df.join(results_df, on="external_id", how="left")
 
     async def _send_invoice_to_factus(
         self,

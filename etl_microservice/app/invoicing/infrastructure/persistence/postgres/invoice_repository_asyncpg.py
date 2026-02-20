@@ -1,4 +1,4 @@
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import polars as pl
 
 from app.invoicing.domain.entities.invoice import Invoice
@@ -13,7 +13,12 @@ class InvoiceRepositoryAsyncpg:
         if df.is_empty():
             return
 
-        records = df.select(INVOICE_COLUMNS).rows()
+        df_to_save = df
+        for column in INVOICE_COLUMNS:
+            if column not in df_to_save.columns:
+                df_to_save = df_to_save.with_columns(pl.lit(None).alias(column))
+
+        records = df_to_save.select(INVOICE_COLUMNS).rows()
         async with self._db_pool.acquire() as connection:
             await connection.copy_records_to_table(
                 "invoices",
@@ -23,7 +28,8 @@ class InvoiceRepositoryAsyncpg:
 
     async def fetch_invoices(self, customer_id: str | None = None) -> list[Invoice]:
         query = (
-            "SELECT external_id, customer_id, issued_at, total, currency, tax_amount "
+            "SELECT external_id, customer_id, issued_at, total, currency, tax_amount, "
+            "factus_invoice_id, qr_url, pdf_url, status, error_message "
             "FROM invoices"
         )
         params: tuple[str, ...] = ()
@@ -43,6 +49,11 @@ class InvoiceRepositoryAsyncpg:
                 total=row["total"],
                 currency=row["currency"],
                 tax_amount=row["tax_amount"],
+                factus_invoice_id=row["factus_invoice_id"],
+                qr_url=row["qr_url"],
+                pdf_url=row["pdf_url"],
+                status=row["status"],
+                error_message=row["error_message"],
             )
             for row in rows
         ]

@@ -89,6 +89,12 @@ class TestInvoiceEntities(unittest.TestCase):
         self.assertEqual(batch_id, "batch-2")
         self.assertIsNotNone(repository.saved_df)
         self.assertEqual(repository.saved_df.height, 1)
+        saved_row = repository.saved_df.to_dicts()[0]
+        self.assertEqual(saved_row["factus_invoice_id"], "1001")
+        self.assertEqual(saved_row["qr_url"], "qr")
+        self.assertEqual(saved_row["pdf_url"], "pdf")
+        self.assertEqual(saved_row["status"], "success")
+        self.assertIsNone(saved_row["error_message"])
         self.assertEqual(factus_client.numbering_range_calls, 1)
         self.assertEqual(len(factus_client.created_payloads), 1)
         self.assertEqual(
@@ -123,6 +129,10 @@ class TestInvoiceEntities(unittest.TestCase):
         self.assertEqual(batch_id, "batch-timeout")
         self.assertIsNotNone(repository.saved_df)
         self.assertEqual(repository.saved_df.height, 1)
+        saved_row = repository.saved_df.to_dicts()[0]
+        self.assertEqual(saved_row["status"], "error")
+        self.assertEqual(saved_row["error_message"], "timeout")
+        self.assertIsNone(saved_row["factus_invoice_id"])
 
 
 if __name__ == "__main__":

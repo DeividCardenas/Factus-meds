@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
+from typing import AsyncIterator
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 from fastapi import FastAPI
 import strawberry
 from strawberry.fastapi import GraphQLRouter
@@ -27,6 +28,11 @@ class InvoiceType:
     total: Decimal | None
     currency: str | None
     tax_amount: Decimal | None
+    factus_invoice_id: str | None
+    qr_url: str | None
+    pdf_url: str | None
+    status: str | None
+    error_message: str | None
 
 
 @strawberry.type
@@ -48,13 +54,18 @@ class Query:
                 total=invoice.total,
                 currency=invoice.currency,
                 tax_amount=invoice.tax_amount,
+                factus_invoice_id=invoice.factus_invoice_id,
+                qr_url=invoice.qr_url,
+                pdf_url=invoice.pdf_url,
+                status=invoice.status,
+                error_message=invoice.error_message,
             )
             for invoice in invoices
         ]
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_json_logging()
     app.state.db_pool = await asyncpg.create_pool(settings.database_url)
     missing_factus_settings = [
