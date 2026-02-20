@@ -30,10 +30,26 @@ etl_microservice/
   app/
     core/
       config.py
+    invoicing/
+      application/
+        use_cases/
+          process_invoice_batch.py
+      domain/
+        entities/
+          invoice.py
+          invoice_batch.py
+      infrastructure/
+        etl/
+          polars_transformer.py
+        persistence/
+          postgres/
+            invoice_repository_asyncpg.py
     kafka/
       consumer.py
-    services/
-      etl_service.py
+    shared/
+      infrastructure/
+        logging/
+          structured_logger.py
     main.py
 ```
 

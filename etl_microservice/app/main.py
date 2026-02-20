@@ -8,8 +8,14 @@ import strawberry
 from strawberry.fastapi import GraphQLRouter
 
 from app.core.config import settings
+from app.invoicing.application.use_cases.process_invoice_batch import (
+    ProcessInvoiceBatchUseCase,
+)
+from app.invoicing.infrastructure.persistence.postgres.invoice_repository_asyncpg import (
+    InvoiceRepositoryAsyncpg,
+)
 from app.kafka.consumer import InvoiceKafkaConsumer
-from app.services.etl_service import InvoiceEtlService
+from app.shared.infrastructure.logging.structured_logger import configure_json_logging
 
 
 @strawberry.type
@@ -30,37 +36,34 @@ class Query:
         info: strawberry.Info,
         customer_id: str | None = None,
     ) -> list[InvoiceType]:
-        query = (
-            "SELECT external_id, customer_id, issued_at, total, currency, tax_amount "
-            "FROM invoices"
-        )
-        params = ()
-        if customer_id:
-            query += " WHERE customer_id = $1"
-            params = (customer_id,)
-        query += " ORDER BY issued_at DESC NULLS LAST"
-
-        async with info.context["request"].app.state.db_pool.acquire() as connection:
-            rows = await connection.fetch(query, *params)
+        repository = info.context["request"].app.state.invoice_repository
+        invoices = await repository.fetch_invoices(customer_id=customer_id)
 
         return [
             InvoiceType(
-                external_id=row["external_id"],
-                customer_id=row["customer_id"],
-                issued_at=row["issued_at"],
-                total=row["total"],
-                currency=row["currency"],
-                tax_amount=row["tax_amount"],
+                external_id=invoice.external_id,
+                customer_id=invoice.customer_id,
+                issued_at=invoice.issued_at,
+                total=invoice.total,
+                currency=invoice.currency,
+                tax_amount=invoice.tax_amount,
             )
-            for row in rows
+            for invoice in invoices
         ]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_json_logging()
     app.state.db_pool = await asyncpg.create_pool(settings.database_url)
-    etl_service = InvoiceEtlService(db_pool=app.state.db_pool)
-    consumer = InvoiceKafkaConsumer(etl_service=etl_service)
+    invoice_repository = InvoiceRepositoryAsyncpg(db_pool=app.state.db_pool)
+    process_invoice_batch_use_case = ProcessInvoiceBatchUseCase(
+        invoice_repository=invoice_repository
+    )
+    consumer = InvoiceKafkaConsumer(
+        process_invoice_batch_use_case=process_invoice_batch_use_case
+    )
+    app.state.invoice_repository = invoice_repository
     await consumer.start()
     app.state.consumer = consumer
 
