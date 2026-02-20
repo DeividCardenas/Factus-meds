@@ -21,3 +21,18 @@ config/
 routes/
   api.php
 ```
+
+## Etapa 2 - Microservicio ETL (Python)
+
+```text
+etl_microservice/
+  requirements.txt
+  app/
+    core/
+      config.py
+    kafka/
+      consumer.py
+    services/
+      etl_service.py
+    main.py
+```
