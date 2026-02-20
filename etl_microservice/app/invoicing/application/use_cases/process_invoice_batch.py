@@ -92,8 +92,9 @@ class ProcessInvoiceBatchUseCase:
             )
         except httpx.TimeoutException as exc:
             logger.warning(
-                "factus_invoice_timeout external_id=%s",
+                "factus_invoice_timeout external_id=%s error=%s",
                 external_id,
+                str(exc),
                 extra={"batch_id": batch_id},
             )
             return FactusInvoiceResult(
@@ -106,8 +107,9 @@ class ProcessInvoiceBatchUseCase:
             )
         except httpx.HTTPError as exc:
             logger.warning(
-                "factus_invoice_http_error external_id=%s",
+                "factus_invoice_http_error external_id=%s error=%s",
                 external_id,
+                str(exc),
                 extra={"batch_id": batch_id},
             )
             return FactusInvoiceResult(
