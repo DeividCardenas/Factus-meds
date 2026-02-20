@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-import os
+from decimal import Decimal
 
 import asyncpg
 from fastapi import FastAPI
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 
+from app.core.config import settings
 from app.kafka.consumer import InvoiceKafkaConsumer
 from app.services.etl_service import InvoiceEtlService
 
@@ -16,9 +17,9 @@ class InvoiceType:
     external_id: str
     customer_id: str | None
     issued_at: datetime | None
-    total: float | None
+    total: Decimal | None
     currency: str | None
-    tax_amount: float | None
+    tax_amount: Decimal | None
 
 
 @strawberry.type
@@ -33,7 +34,7 @@ class Query:
             "SELECT external_id, customer_id, issued_at, total, currency, tax_amount "
             "FROM invoices"
         )
-        params: tuple[str, ...] = ()
+        params = ()
         if customer_id:
             query += " WHERE customer_id = $1"
             params = (customer_id,)
@@ -47,9 +48,9 @@ class Query:
                 external_id=row["external_id"],
                 customer_id=row["customer_id"],
                 issued_at=row["issued_at"],
-                total=float(row["total"]) if row["total"] is not None else None,
+                total=row["total"],
                 currency=row["currency"],
-                tax_amount=float(row["tax_amount"]) if row["tax_amount"] is not None else None,
+                tax_amount=row["tax_amount"],
             )
             for row in rows
         ]
@@ -57,9 +58,8 @@ class Query:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    database_url = os.getenv("DATABASE_URL", "postgresql://factus:factus@postgres:5432/factus")
-    app.state.db_pool = await asyncpg.create_pool(database_url)
-    etl_service = InvoiceEtlService()
+    app.state.db_pool = await asyncpg.create_pool(settings.database_url)
+    etl_service = InvoiceEtlService(db_pool=app.state.db_pool)
     consumer = InvoiceKafkaConsumer(etl_service=etl_service)
     await consumer.start()
     app.state.consumer = consumer
@@ -72,7 +72,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Invoice ETL Microservice", lifespan=lifespan)
-app.include_router(GraphQLRouter(strawberry.Schema(query=Query)), prefix="/graphql")
+schema = strawberry.Schema(query=Query)
+app.include_router(GraphQLRouter(schema), prefix="/graphql")
 
 
 @app.get("/health")

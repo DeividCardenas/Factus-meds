@@ -1,18 +1,27 @@
 import asyncio
-import os
 from time import perf_counter
 
 import asyncpg
 import polars as pl
 
+from app.core.config import settings
+
 TAX_RATE = 0.19
 
 
 class InvoiceEtlService:
-    def __init__(self) -> None:
-        self._database_url = os.getenv(
-            "DATABASE_URL", "postgresql://factus:factus@postgres:5432/factus"
-        )
+    INVOICE_COLUMNS = [
+        "external_id",
+        "customer_id",
+        "issued_at",
+        "total",
+        "currency",
+        "tax_amount",
+    ]
+
+    def __init__(self, db_pool: asyncpg.Pool | None = None) -> None:
+        self._database_url = settings.database_url
+        self._db_pool = db_pool
 
     def transform(self, invoices: list[dict]) -> pl.DataFrame:
         started_at = perf_counter()
@@ -51,15 +60,23 @@ class InvoiceEtlService:
         if df.is_empty():
             return
 
-        columns = ["external_id", "customer_id", "issued_at", "total", "currency", "tax_amount"]
-        records = df.select(columns).rows()
+        records = df.select(self.INVOICE_COLUMNS).rows()
+
+        if self._db_pool is not None:
+            async with self._db_pool.acquire() as connection:
+                await connection.copy_records_to_table(
+                    "invoices",
+                    records=records,
+                    columns=self.INVOICE_COLUMNS,
+                )
+            return
 
         connection = await asyncpg.connect(self._database_url)
         try:
             await connection.copy_records_to_table(
                 "invoices",
                 records=records,
-                columns=columns,
+                columns=self.INVOICE_COLUMNS,
             )
         finally:
             await connection.close()
