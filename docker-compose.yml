@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=factus
       - POSTGRES_USER=factus
@@ -15,9 +16,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   kafka:
     image: confluentinc/cp-kafka:7.6.1
+    restart: unless-stopped
     ports:
       - "9092:9092"
     environment:
@@ -40,10 +47,16 @@ services:
       timeout: 10s
       retries: 10
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   etl:
     build:
       context: ./etl_microservice
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
@@ -56,11 +69,31 @@ services:
       - DATABASE_URL=postgresql://factus:factus@postgres:5432/factus
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   laravel:
     build:
       context: .
       dockerfile: docker/laravel/Dockerfile
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
@@ -69,7 +102,26 @@ services:
       - KAFKA_INGEST_TOPIC=invoice.ingest.v1
       - INGEST_API_KEY=local-dev-ingest-key
     ports:
-      - "8080:80"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"exit((int)!file_get_contents('http://localhost:8080/health'));\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:
