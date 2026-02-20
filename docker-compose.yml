@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=factus
+      - POSTGRES_USER=factus
+      - POSTGRES_PASSWORD=factus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U factus -d factus"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     ports:
@@ -30,10 +47,13 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_INGEST_TOPIC=invoice.ingest.v1
       - KAFKA_GROUP_ID=invoice-etl-v1
+      - DATABASE_URL=postgresql://factus:factus@postgres:5432/factus
     ports:
       - "8000:8000"
 
@@ -50,3 +70,6 @@ services:
       - INGEST_API_KEY=local-dev-ingest-key
     ports:
       - "8080:80"
+
+volumes:
+  postgres_data:
