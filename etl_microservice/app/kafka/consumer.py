@@ -53,4 +53,4 @@ class InvoiceKafkaConsumer:
             logger.warning("Kafka message payload is not a list. Skipping message.")
             return
 
-        await asyncio.to_thread(self._etl_service.transform, invoices)
+        await self._etl_service.transform_and_persist(invoices)
