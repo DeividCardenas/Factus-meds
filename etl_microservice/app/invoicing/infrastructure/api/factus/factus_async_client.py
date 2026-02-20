@@ -4,6 +4,9 @@ import httpx
 
 
 class FactusAsyncClient:
+    _DEFAULT_TOKEN_EXPIRY_SECONDS = 3600
+    _TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS = 30
+
     def __init__(
         self,
         base_url: str,
@@ -32,6 +35,22 @@ class FactusAsyncClient:
             if datetime.now(UTC) < self._token_expires_at:
                 return self._access_token
 
+        missing_credentials = [
+            name
+            for name, value in (
+                ("email", self._email),
+                ("password", self._password),
+                ("client_id", self._client_id),
+                ("client_secret", self._client_secret),
+            )
+            if not value
+        ]
+        if missing_credentials:
+            raise RuntimeError(
+                "Factus authentication failed: missing credentials "
+                + ", ".join(missing_credentials)
+            )
+
         response = await self._http_client.post(
             "/oauth/token",
             data={
@@ -46,12 +65,16 @@ class FactusAsyncClient:
 
         token = payload.get("access_token")
         if not token:
-            raise RuntimeError("Factus authentication failed: missing access_token")
+            raise RuntimeError(
+                "Factus authentication failed: access_token not found in response"
+            )
 
-        expires_in = int(payload.get("expires_in", 3600))
+        expires_in = int(
+            payload.get("expires_in", self._DEFAULT_TOKEN_EXPIRY_SECONDS)
+        )
         self._access_token = token
         self._token_expires_at = datetime.now(UTC) + timedelta(
-            seconds=max(expires_in - 30, 0)
+            seconds=max(expires_in - self._TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS, 0)
         )
         return token
 
@@ -67,7 +90,10 @@ class FactusAsyncClient:
         payload = response.json()
         ranges = payload.get("data", payload)
         if not isinstance(ranges, list):
-            raise RuntimeError("Factus numbering ranges response is invalid")
+            raise RuntimeError(
+                "Factus numbering ranges response is invalid: expected list, got "
+                + type(ranges).__name__
+            )
 
         for range_item in ranges:
             if not isinstance(range_item, dict):
@@ -81,7 +107,9 @@ class FactusAsyncClient:
                     break
                 return int(range_id)
 
-        raise RuntimeError("Factus active numbering range not found")
+        raise RuntimeError(
+            f"Factus active numbering range not found among {len(ranges)} range(s)"
+        )
 
     async def _request_numbering_ranges(self, token: str) -> httpx.Response:
         return await self._http_client.get(

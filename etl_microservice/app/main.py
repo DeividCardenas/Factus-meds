@@ -57,6 +57,21 @@ class Query:
 async def lifespan(app: FastAPI):
     configure_json_logging()
     app.state.db_pool = await asyncpg.create_pool(settings.database_url)
+    missing_factus_settings = [
+        name
+        for name, value in (
+            ("FACTUS_EMAIL", settings.factus_email),
+            ("FACTUS_PASSWORD", settings.factus_password),
+            ("FACTUS_CLIENT_ID", settings.factus_client_id),
+            ("FACTUS_CLIENT_SECRET", settings.factus_client_secret),
+        )
+        if not value
+    ]
+    if missing_factus_settings:
+        raise RuntimeError(
+            "Missing required Factus environment variables: "
+            + ", ".join(missing_factus_settings)
+        )
     factus_client = FactusAsyncClient(
         base_url=settings.factus_base_url,
         email=settings.factus_email,
