@@ -9,6 +9,7 @@ from opentelemetry import trace
 import polars as pl
 
 from app.invoicing.application.ports.factus_client_port import FactusClientPort
+from app.invoicing.application.ports.invoice_event_publisher_port import InvoiceEventPublisherPort
 from app.invoicing.application.ports.invoice_repository_port import InvoiceRepositoryPort
 from app.invoicing.domain.entities.invoice_batch import InvoiceBatch
 from app.invoicing.infrastructure.etl.polars_transformer import transform_invoices
@@ -29,14 +30,19 @@ class FactusInvoiceResult:
 
 class ProcessInvoiceBatchUseCase:
     _FACTUS_CONCURRENCY_LIMIT = 50
+    _FACTUS_MAX_RETRIES = 3
 
     def __init__(
         self,
         invoice_repository: InvoiceRepositoryPort,
         factus_client: FactusClientPort,
+        event_publisher: InvoiceEventPublisherPort | None = None,
+        retry_base_delay_seconds: float = 1.0,
     ) -> None:
         self._invoice_repository = invoice_repository
         self._factus_client = factus_client
+        self._event_publisher = event_publisher
+        self._retry_base_delay_seconds = retry_base_delay_seconds
 
     async def execute(self, payload: Mapping[str, Any]) -> str:
         batch = InvoiceBatch.from_message(payload)
@@ -66,9 +72,11 @@ class ProcessInvoiceBatchUseCase:
             sum(result.status == "error" for result in results),
             extra={"batch_id": batch.batch_id},
         )
-        await self._invoice_repository.save_dataframe(
-            self._attach_factus_results(df=df, results=results)
-        )
+        result_df = self._attach_factus_results(df=df, results=results)
+        await self._invoice_repository.save_dataframe(result_df)
+        if self._event_publisher is not None:
+            for row in result_df.rows(named=True):
+                await self._event_publisher.publish_invoice_processed(row)
         return batch.batch_id
 
     @staticmethod
@@ -95,54 +103,70 @@ class ProcessInvoiceBatchUseCase:
         batch_id: str,
     ) -> FactusInvoiceResult:
         external_id = str(invoice_row.get("external_id", ""))
-        try:
-            async with semaphore:
-                response = await self._factus_client.create_invoice(
-                    self._build_factus_invoice_payload(invoice_row, batch_id),
-                    numbering_range_id=numbering_range_id,
+        payload = self._build_factus_invoice_payload(invoice_row, batch_id)
+        last_exc: Exception | None = None
+        for attempt in range(self._FACTUS_MAX_RETRIES + 1):
+            try:
+                async with semaphore:
+                    response = await self._factus_client.create_invoice(
+                        payload,
+                        numbering_range_id=numbering_range_id,
+                    )
+                data = response.get("data", response)
+                if not isinstance(data, dict):
+                    data = {}
+                return FactusInvoiceResult(
+                    external_id=external_id,
+                    factus_invoice_id=(
+                        str(data.get("id")) if data.get("id") is not None else None
+                    ),
+                    qr_url=data.get("qr"),
+                    pdf_url=data.get("pdf"),
+                    status="success",
                 )
-            data = response.get("data", response)
-            if not isinstance(data, dict):
-                data = {}
-            return FactusInvoiceResult(
-                external_id=external_id,
-                factus_invoice_id=(
-                    str(data.get("id")) if data.get("id") is not None else None
-                ),
-                qr_url=data.get("qr"),
-                pdf_url=data.get("pdf"),
-                status="success",
-            )
-        except httpx.TimeoutException as exc:
-            logger.warning(
-                "factus_invoice_timeout external_id=%s error=%s",
-                external_id,
-                str(exc),
-                extra={"batch_id": batch_id},
-            )
-            return FactusInvoiceResult(
-                external_id=external_id,
-                factus_invoice_id=None,
-                qr_url=None,
-                pdf_url=None,
-                status="error",
-                error=str(exc),
-            )
-        except httpx.HTTPError as exc:
-            logger.warning(
-                "factus_invoice_http_error external_id=%s error=%s",
-                external_id,
-                str(exc),
-                extra={"batch_id": batch_id},
-            )
-            return FactusInvoiceResult(
-                external_id=external_id,
-                factus_invoice_id=None,
-                qr_url=None,
-                pdf_url=None,
-                status="error",
-                error=str(exc),
-            )
+            except httpx.TimeoutException as exc:
+                last_exc = exc
+                if attempt < self._FACTUS_MAX_RETRIES:
+                    delay = self._retry_base_delay_seconds * (2**attempt)
+                    logger.warning(
+                        "factus_invoice_timeout_retry external_id=%s attempt=%s delay=%.2fs error=%s",
+                        external_id,
+                        attempt + 1,
+                        delay,
+                        str(exc),
+                        extra={"batch_id": batch_id},
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning(
+                    "factus_invoice_timeout external_id=%s error=%s",
+                    external_id,
+                    str(exc),
+                    extra={"batch_id": batch_id},
+                )
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "factus_invoice_http_error external_id=%s error=%s",
+                    external_id,
+                    str(exc),
+                    extra={"batch_id": batch_id},
+                )
+                return FactusInvoiceResult(
+                    external_id=external_id,
+                    factus_invoice_id=None,
+                    qr_url=None,
+                    pdf_url=None,
+                    status="error",
+                    error=str(exc),
+                )
+        return FactusInvoiceResult(
+            external_id=external_id,
+            factus_invoice_id=None,
+            qr_url=None,
+            pdf_url=None,
+            status="error",
+            error=str(last_exc),
+        )
 
     @staticmethod
     def _build_factus_invoice_payload(

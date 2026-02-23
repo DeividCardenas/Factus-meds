@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-etl:
+    name: ETL – Python Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: etl_microservice
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: etl_microservice/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+  lint-etl:
+    name: ETL – Lint & Type-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: etl_microservice
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: etl_microservice/requirements.txt
+
+      - name: Install linting tools
+        run: pip install -r requirements.txt ruff mypy
+
+      - name: Ruff lint
+        run: ruff check app/
+
+      - name: Mypy type-check
+        run: mypy app/ --ignore-missing-imports
+
+  build-etl:
+    name: ETL – Docker Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [test-etl, lint-etl]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ETL image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./etl_microservice
+          push: false
+          tags: factus-etl:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/etl-image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: etl-image
+          path: /tmp/etl-image.tar
+          retention-days: 1
+
+  build-laravel:
+    name: Laravel – Docker Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Laravel image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/laravel/Dockerfile
+          push: false
+          tags: factus-laravel:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/laravel-image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-image
+          path: /tmp/laravel-image.tar
+          retention-days: 1
+
+  security-scan:
+    name: Security – Trivy Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    needs: [build-etl, build-laravel]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ETL image
+        uses: actions/download-artifact@v4
+        with:
+          name: etl-image
+          path: /tmp
+
+      - name: Download Laravel image
+        uses: actions/download-artifact@v4
+        with:
+          name: laravel-image
+          path: /tmp
+
+      - name: Load images
+        run: |
+          docker load --input /tmp/etl-image.tar
+          docker load --input /tmp/laravel-image.tar
+
+      - name: Scan ETL image with Trivy
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: factus-etl:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Scan Laravel image with Trivy
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: factus-laravel:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH

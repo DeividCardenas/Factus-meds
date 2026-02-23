@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from decimal import Decimal
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import asyncpg  # type: ignore[import-untyped]
 from fastapi import FastAPI
@@ -18,6 +19,7 @@ import strawberry
 from strawberry.fastapi import GraphQLRouter
 
 from app.core.config import settings
+from app.invoicing.application.ports.invoice_event_publisher_port import InvoiceEventPublisherPort
 from app.invoicing.application.use_cases.process_invoice_batch import (
     ProcessInvoiceBatchUseCase,
 )
@@ -27,6 +29,7 @@ from app.invoicing.infrastructure.persistence.postgres.invoice_repository_asyncp
 from app.invoicing.infrastructure.api.factus.factus_async_client import FactusAsyncClient
 from app.kafka.consumer import InvoiceKafkaConsumer
 from app.shared.infrastructure.logging.structured_logger import configure_json_logging
+from app.shared.infrastructure.pubsub.broadcaster import InvoiceEventBroadcaster
 
 
 @strawberry.type
@@ -73,6 +76,45 @@ class Query:
         ]
 
 
+@strawberry.type
+class Subscription:
+    @strawberry.subscription
+    async def invoice_processed(
+        self,
+        info: strawberry.Info,
+    ) -> AsyncGenerator[InvoiceType, None]:
+        context_obj = info.context.get("ws") or info.context.get("request")
+        broadcaster: InvoiceEventBroadcaster = context_obj.app.state.invoice_broadcaster
+        async for event in broadcaster.subscribe():
+            yield _invoice_dict_to_type(event)
+
+
+def _invoice_dict_to_type(event: dict[str, Any]) -> InvoiceType:
+    total = event.get("total")
+    tax_amount = event.get("tax_amount")
+    return InvoiceType(
+        external_id=str(event.get("external_id") or ""),
+        customer_id=event.get("customer_id"),
+        issued_at=event.get("issued_at"),
+        total=Decimal(str(total)) if total is not None else None,
+        currency=event.get("currency"),
+        tax_amount=Decimal(str(tax_amount)) if tax_amount is not None else None,
+        factus_invoice_id=event.get("factus_invoice_id"),
+        qr_url=event.get("qr_url"),
+        pdf_url=event.get("pdf_url"),
+        status=event.get("status"),
+        error_message=event.get("error_message"),
+    )
+
+
+class _BroadcasterEventPublisher:
+    def __init__(self, broadcaster: InvoiceEventBroadcaster) -> None:
+        self._broadcaster = broadcaster
+
+    async def publish_invoice_processed(self, invoice_data: dict[str, Any]) -> None:
+        await self._broadcaster.publish(invoice_data)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_json_logging()
@@ -116,15 +158,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         client_secret=settings.factus_client_secret,
     )
     invoice_repository = InvoiceRepositoryAsyncpg(db_pool=app.state.db_pool)
+    broadcaster = InvoiceEventBroadcaster()
+    event_publisher = _BroadcasterEventPublisher(broadcaster)
     process_invoice_batch_use_case = ProcessInvoiceBatchUseCase(
         invoice_repository=invoice_repository,
         factus_client=factus_client,
+        event_publisher=event_publisher,
     )
     consumer = InvoiceKafkaConsumer(
         process_invoice_batch_use_case=process_invoice_batch_use_case
     )
     app.state.factus_client = factus_client
     app.state.invoice_repository = invoice_repository
+    app.state.invoice_broadcaster = broadcaster
     await consumer.start()
     app.state.consumer = consumer
 
@@ -142,7 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Invoice ETL Microservice", lifespan=lifespan)
 FastAPIInstrumentor.instrument_app(app)
 Instrumentator().instrument(app).expose(app)
-schema = strawberry.Schema(query=Query)
+schema = strawberry.Schema(query=Query, subscription=Subscription)
 app.include_router(GraphQLRouter(schema), prefix="/graphql")
 
 
