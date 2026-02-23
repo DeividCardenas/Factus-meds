@@ -66,12 +66,13 @@ export default function AuditPage() {
     const unsubscribe = subscribeToMore<{ invoiceProcessed: Invoice }>({
       document: INVOICE_PROCESSED_SUBSCRIPTION,
       updateQuery: (prev, { subscriptionData }) => {
-        if (!subscriptionData.data) return prev;
+        if (!subscriptionData.data) return prev as { invoices: Invoice[] };
         const newInvoice = subscriptionData.data.invoiceProcessed;
-        if (prev.invoices.some((inv) => inv.external_id === newInvoice.external_id)) {
-          return prev;
+        const prevInvoices = (prev.invoices ?? []) as Invoice[];
+        if (prevInvoices.some((inv) => inv.external_id === newInvoice.external_id)) {
+          return prev as { invoices: Invoice[] };
         }
-        return { invoices: [newInvoice, ...prev.invoices] };
+        return { invoices: [newInvoice, ...prevInvoices] } as { invoices: Invoice[] };
       },
     });
     return () => unsubscribe();
