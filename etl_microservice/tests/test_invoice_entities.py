@@ -108,7 +108,9 @@ class TestInvoiceEntities(unittest.TestCase):
         repository = _FakeRepository()
         factus_client = _FakeFactusClient(fail_external_id="INV-timeout")
         use_case = ProcessInvoiceBatchUseCase(
-            invoice_repository=repository, factus_client=factus_client
+            invoice_repository=repository,
+            factus_client=factus_client,
+            retry_base_delay_seconds=0.0,
         )
         payload = {
             "batch_id": "batch-timeout",

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { gql } from "@apollo/client";
 import { useQuery } from "@apollo/client/react";
 import { AlertCircle, QrCode } from "lucide-react";
@@ -31,6 +32,22 @@ const GET_INVOICES = gql`
   }
 `;
 
+const INVOICE_PROCESSED_SUBSCRIPTION = gql`
+  subscription OnInvoiceProcessed {
+    invoiceProcessed {
+      external_id
+      customer_id
+      issued_at
+      total
+      tax_amount
+      status
+      factus_invoice_id
+      qr_url
+      error_message
+    }
+  }
+`;
+
 function getStatusVariant(
   status: InvoiceStatus
 ): "success" | "warning" | "destructive" | "secondary" {
@@ -41,9 +58,24 @@ function getStatusVariant(
 }
 
 export default function AuditPage() {
-  const { loading, error, data } = useQuery<{ invoices: Invoice[] }>(
-    GET_INVOICES
-  );
+  const { loading, error, data, subscribeToMore } = useQuery<{
+    invoices: Invoice[];
+  }>(GET_INVOICES);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToMore<{ invoiceProcessed: Invoice }>({
+      document: INVOICE_PROCESSED_SUBSCRIPTION,
+      updateQuery: (prev, { subscriptionData }) => {
+        if (!subscriptionData.data) return prev;
+        const newInvoice = subscriptionData.data.invoiceProcessed;
+        if (prev.invoices.some((inv) => inv.external_id === newInvoice.external_id)) {
+          return prev;
+        }
+        return { invoices: [newInvoice, ...prev.invoices] };
+      },
+    });
+    return () => unsubscribe();
+  }, [subscribeToMore]);
 
   if (loading) {
     return (
