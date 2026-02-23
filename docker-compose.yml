@@ -110,6 +110,26 @@ services:
     image: grafana/grafana:latest
     restart: unless-stopped
     ports:
+      - "3001:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      laravel:
+        condition: service_healthy
+      etl:
+        condition: service_healthy
+    environment:
+      - NEXT_PUBLIC_GRAPHQL_URL=http://localhost:8000/graphql
+      - NEXT_PUBLIC_REST_API_URL=http://localhost:8080/api/v1
+    ports:
       - "3000:3000"
     logging:
       driver: json-file
